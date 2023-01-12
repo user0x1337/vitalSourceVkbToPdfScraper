@@ -1,3 +1,4 @@
+import base64
 import json
 import os
 import time
@@ -5,6 +6,7 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.print_page_options import PrintOptions
 from selenium.webdriver.common.proxy import Proxy, ProxyType
 from termcolor import colored
 from tqdm import tqdm
@@ -72,6 +74,7 @@ class Scraper:
         chrome_options.add_experimental_option('prefs', prefs)
         chrome_options.add_argument('--kiosk-printing')
         chrome_options.add_argument('--start-maximized')
+        chrome_options.add_argument('--headless')
         self.driver = webdriver.Chrome(options=chrome_options, desired_capabilities=capabilities)
         self.driver.set_window_size(1920, 1000)
         self.driver.implicitly_wait(20)
@@ -93,7 +96,9 @@ class Scraper:
         index = current_page
         for url in urls:
             self.driver.get(url)
-            self.driver.save_screenshot(f"{filepath}_{index}.png")
+            pdf = self.driver.print_page().encode()
+            with open(f"{filepath}_{index}.pdf", "wb") as f:
+                f.write(base64.decodebytes(pdf))
             self.visited_urls.add(url)
             index += 1
 
@@ -117,6 +122,8 @@ class Scraper:
         self.driver.get(f"{self.config['URI']}{0}")
         time.sleep(10)
         print(colored('[+]', 'green'), "Target webpage opened")
+        self.driver.refresh()
+        time.sleep(5)
 
         buttons = self.driver.find_elements(by=By.TAG_NAME, value="button")
         for button in buttons:
@@ -130,7 +137,7 @@ class Scraper:
                                                    attr="class",
                                                    value="InputControl__input-fbzQBk hDtUvs TextField__InputControl-iza-dmV iISUBf")
         if current_page_input is None:
-            print(colored("red", "[-]"), "Current Page input not found")
+            print(colored("[-]", "red"), "Current Page input not found")
             return
 
         last_page = self.find_one_element(element_type="div",
