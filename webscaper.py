@@ -6,7 +6,6 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.print_page_options import PrintOptions
 from selenium.webdriver.common.proxy import Proxy, ProxyType
 from termcolor import colored
 from tqdm import tqdm
@@ -45,7 +44,7 @@ def process_browser_log_entry(entry):
 class Scraper:
     def __init__(self, config):
         self.config = config
-        self.visited_urls = set([])
+        self.printed_file_urls = set([])
 
         settings = {
             "recentDestinations": [{
@@ -88,23 +87,24 @@ class Scraper:
 
         return None
 
-    def save_page(self, browser_log, filepath, current_page):
+    def save_page(self, browser_log, path, filename, current_page):
         log = [x['message'] for x in browser_log if
-               "encrypted/1600" in x['message'] and "Network.responseReceived" in x['message']]
+               "encrypted/800" in x['message'] and "Network.responseReceived" in x['message']]
 
         urls = [json.loads(x)['message']['params']['response']['url'] for x in log]
-        urls = [url for url in urls if url not in self.visited_urls]
+        urls = [url for url in urls if url not in self.printed_file_urls]
         index = current_page
         for url in urls:
-            time.sleep(1.5)
+            time.sleep(0.5)
             self.driver.get(url)
             pdf = self.driver.print_page().encode()
-            with open(f"{filepath}_{index}.pdf", "wb") as f:
+            filepath = os.path.join(path, "".join(["{:04d}_".format(index), filename]))
+            with open(f"{filepath}.pdf", "wb") as f:
                 f.write(base64.decodebytes(pdf))
-            self.visited_urls.add(url)
+            self.printed_file_urls.add(url)
             index += 1
 
-        return current_page + (len(urls) - 1)
+        return current_page
 
     def scrape_page(self):
         print(colored('[*]', 'blue'), "Logging in...")
@@ -122,10 +122,12 @@ class Scraper:
         print(colored('[+]', 'green'), "Log in successful")
         # Call given webpage
         self.driver.get(f"{self.config['URI']}{self.config['IDX']}")
-        time.sleep(10)
+        time.sleep(15)
         print(colored('[+]', 'green'), "Target webpage opened")
+        self.driver.execute_script("localStorage.setItem(arguments[0],arguments[1])", "_grecaptcha",
+                                   "09AJ4Tk-4u7l2kEMxqC71Y07kQCxR9XwfDcHsfPmNZDFFHF52vqaJy7vBA3iUWituEr2a2tePf55rdjMe_cfXgvgmdu53Ra67Zxos")
         self.driver.refresh()
-        time.sleep(5)
+        time.sleep(10)
 
         buttons = self.driver.find_elements(by=By.TAG_NAME, value="button")
         for button in buttons:
@@ -169,14 +171,15 @@ class Scraper:
         with tqdm(total=(last_page - current_page)) as pbar:
             while current_page <= last_page:
                 new_current_page = self.save_page(browser_log=self.driver.get_log('performance'),
-                                              filepath=f"/home/tommy/{title}/{title}",
-                                              current_page=current_page)
+                                                  path=f"/home/tommy/{title}/",
+                                                  filename=title,
+                                                  current_page=current_page)
 
                 pbar.update(new_current_page - current_page + 1)
                 current_page = new_current_page + 1
                 counter += 1
                 self.driver.get(f"{self.config['URI']}{current_page}")
-                time.sleep(5)
+                time.sleep(10)
 
         print(colored('[+]', 'green'), "Scraping done")
 
