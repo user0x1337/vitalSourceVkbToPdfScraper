@@ -17,7 +17,8 @@ CONFIG = {
     'PASS': "",
     'PROXY_IP': None,
     'PROXY_PORT': None,
-    'LOGIN_URL': 'https://login.vitalsource.com/?redirect_uri=https%3A%2F%2Fbookshelf.vitalsource.com%2F%23%2F&brand=bookshelf.vitalsource.com'
+    'LOGIN_URL': 'https://login.vitalsource.com/?redirect_uri=https%3A%2F%2Fbookshelf.vitalsource.com%2F%23%2F&brand=bookshelf.vitalsource.com',
+    'IDX': 0
 }
 
 
@@ -29,6 +30,7 @@ def opts():
     parser.add_argument('-w', '--website', dest='URI', help='URI/Website to the Ebook Page')
     parser.add_argument('-u', '--user', dest='USER', help='Login Username')
     parser.add_argument('-p', '--password', dest='PASS', help='Login Password')
+    parser.add_argument('-i', '--index', dest='IDX', help='Starting page index / page id', default=0, type=int)
     parser.add_argument('--socks_proxy_ip', dest='PROXY_IP', help="IP of the proxy", default=None)
     parser.add_argument('--socks_proxy_port', dest='PROXY_PORT', help="Port of the proxy", default=None)
     arguments = parser.parse_args()
@@ -73,7 +75,6 @@ class Scraper:
         prefs = {'printing.print_preview_sticky_settings.appState': json.dumps(settings)}
         chrome_options.add_experimental_option('prefs', prefs)
         chrome_options.add_argument('--kiosk-printing')
-        chrome_options.add_argument('--start-maximized')
         chrome_options.add_argument('--headless')
         self.driver = webdriver.Chrome(options=chrome_options, desired_capabilities=capabilities)
         self.driver.set_window_size(1920, 1000)
@@ -95,6 +96,7 @@ class Scraper:
         urls = [url for url in urls if url not in self.visited_urls]
         index = current_page
         for url in urls:
+            time.sleep(1.5)
             self.driver.get(url)
             pdf = self.driver.print_page().encode()
             with open(f"{filepath}_{index}.pdf", "wb") as f:
@@ -116,10 +118,10 @@ class Scraper:
         password_field.send_keys(self.config['PASS'])
         submit_button.submit()
         time.sleep(10)
-        print(colored('[+]', 'green'), "Log in successful")
 
+        print(colored('[+]', 'green'), "Log in successful")
         # Call given webpage
-        self.driver.get(f"{self.config['URI']}{0}")
+        self.driver.get(f"{self.config['URI']}{self.config['IDX']}")
         time.sleep(10)
         print(colored('[+]', 'green'), "Target webpage opened")
         self.driver.refresh()
@@ -148,7 +150,11 @@ class Scraper:
             return
 
         print(colored('[*]', 'blue'), "Starting scraping...")
-        first_page = int(current_page_input.get_attribute("value"))
+        try:
+            first_page = int(current_page_input.get_attribute("value"))
+        except:
+            first_page = self.config['IDX']
+
         last_page = int(last_page.text.split(" ")[1])
         current_page = first_page
         title = self.driver.find_element(by=By.TAG_NAME, value="img")\
@@ -162,15 +168,15 @@ class Scraper:
         counter = 0
         with tqdm(total=(last_page - current_page)) as pbar:
             while current_page <= last_page:
-                current_page = self.save_page(browser_log=self.driver.get_log('performance'),
+                new_current_page = self.save_page(browser_log=self.driver.get_log('performance'),
                                               filepath=f"/home/tommy/{title}/{title}",
                                               current_page=current_page)
 
-                current_page += 1
+                pbar.update(new_current_page - current_page + 1)
+                current_page = new_current_page + 1
                 counter += 1
                 self.driver.get(f"{self.config['URI']}{current_page}")
                 time.sleep(5)
-                pbar.update(1)
 
         print(colored('[+]', 'green'), "Scraping done")
 
